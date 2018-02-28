@@ -217,10 +217,14 @@ module.exports = function (RED) {
             return Promise.all( partitionIds.map( (partitionId)=> {
                 return node.client.createReceiver('$Default', partitionId, { 'startAfterTime' : Date.now()}).then(function(receiver) {
                     node.log('Created Event Hub partition receiver: ' + partitionId);
-                    // Allthough 'errorReceived' event is defined in azure-event-hubs function documentation, it does not appear to throw one when disconnected
+                    // Handle 'errorReceived' event by reconnecting
                     receiver.on('errorReceived', function( err ){
                         node.log('Receiver error: ', err.message);
                         setStatus(node, statusEnum.error);
+                        process.nextTick(()=>{
+                            disconnectFromEventHub(node);
+                            connectToEventHub( node, connectionString );
+                        });
                     });
                     receiver.on('message', function( message ){
                         setStatus(node, statusEnum.received);
