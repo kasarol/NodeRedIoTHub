@@ -210,12 +210,16 @@ module.exports = function (RED) {
     var connectToEventHub = function( node, connectionString ){
         // Open connection
         node.client = EventHubClient.fromConnectionString(connectionString);
+        var opts = {};
+        if( node.offset ) opts.startAfterOffset = node.offset;
+        else opts.startAfterTime = Date.now()-node.lookback*1000;
+        node.log("Connection options: " + JSON.stringify(opts));
 
         node.client.open()
             .then(node.client.getPartitionIds.bind(node.client))
             .then((partitionIds)=>{
             return Promise.all( partitionIds.map( (partitionId)=> {
-                return node.client.createReceiver('$Default', partitionId, { 'startAfterTime' : Date.now()}).then(function(receiver) {
+                return node.client.createReceiver(node.consumerGroup||"$Default", partitionId, opts).then(function(receiver) {
                     node.log('Created Event Hub partition receiver: ' + partitionId);
                     // Handle 'errorReceived' event by reconnecting
                     receiver.on('errorReceived', function( err ){
@@ -228,6 +232,7 @@ module.exports = function (RED) {
                     });
                     receiver.on('message', function( message ){
                         setStatus(node, statusEnum.received);
+                        node.offset = message.offset;
                         let msg = {
                             deviceId: message.annotations["iothub-connection-device-id"],
                             topic: message.properties.subject||message.properties.to,
@@ -263,6 +268,8 @@ module.exports = function (RED) {
         var node = this;
         this.client = null;
         this.reconnectTimer = null;
+        this.lookback = parseInt(config.lookback);
+        this.consumerGroup = config.consumerGroup.trim();
 
         // Create the Node-RED node
         RED.nodes.createNode(this, config);
@@ -330,9 +337,6 @@ module.exports = function (RED) {
     RED.nodes.registerType("azureiothubreceiver", AzureIoTHubReceiverNode, {
         credentials: {
             connectionString: { type: "text" }
-        },
-        defaults: {
-            name: { value: "Azure IoT Hub Receiver" }
         }
     });
 

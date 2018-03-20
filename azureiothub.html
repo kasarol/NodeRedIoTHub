@@ -44,7 +44,9 @@
         category: 'cloud',
         color: '#00abec',
         defaults: {
-            name: {value:"Azure IoT Hub Receiver"}
+            name: {value:"Azure IoT Hub Receiver"},
+            lookback: { value: 0, validate: RED.validators.number(), required: false },
+            consumerGroup: { value: "$Default", required: true }
         },
         inputs:0,
         outputs:1,
@@ -56,7 +58,7 @@
             return "Azure IoT Hub Receiver";
         },
         credentials: {
-            connectionString: {type:"text"}
+            connectionString: {type:"text", required: true}
         }
     });
 
@@ -130,9 +132,18 @@
         <input type="text" id="node-input-name" placeholder="Name">
     </div>
     <div class="form-row">
-        <label for="node-input-connectionString"><i class="fa fa-bookmark"></i> connectionString</label>
+        <label for="node-input-connectionString"><i class="fa fa-bookmark"></i> Connection String</label>
         <input type="text" id="node-input-connectionString">
     </div>
+    <div class="form-row">
+        <label for="node-input-consumerGroup"><i class="fa fa-group"></i> Consumer Group</label>
+        <input type="text" id="node-input-consumerGroup" placeholder="$Default">
+    </div>
+    <div class="form-row">
+        <label for="node-input-lookback"><i class="fa fa-clock-o"></i> Lookback</label>
+        <input type="number" id="node-input-lookback" placeholder=0>
+    </div>
+	<div class="form-tips"><b>Tip:</b> By default, receiver starts to receive messages from the moment a connection is established. The <i>Lookback</i> parameter can be used to specify a time window from which messages are received from buffer before connection. For example, if the value is 60, upon initial connectivity, messages are received from the one minute period. This only applies to initial connection as the node internally tracks message offset to never lose messages in case of disconnections.</div>
 </script>
 
 <script type="text/x-red" data-help-name="azureiothubdevicetwin">
