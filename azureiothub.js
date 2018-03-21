@@ -3,6 +3,7 @@ module.exports = function (RED) {
     var Client = require('azure-iot-device').Client;
     var Registry = require('azure-iothub').Registry;
     var Message = require('azure-iot-device').Message;
+    var azure = require('azure');
 
     var Protocols = {
         amqp: require('azure-iot-device-amqp').Amqp,
@@ -236,7 +237,8 @@ module.exports = function (RED) {
                         let msg = {
                             deviceId: message.annotations["iothub-connection-device-id"],
                             topic: message.properties.subject||message.properties.to,
-                            payload: message.body
+                            payload: message.body,
+                            offset: message.offset
                         };
                         node.send(msg);
                     });
@@ -280,6 +282,52 @@ module.exports = function (RED) {
 
         node.on('close', function() {
             disconnectFromEventHub(node);
+        });
+    }
+
+    function readServiceBusQueue(){
+        this.serviceBusService.receiveQueueMessage(this.queueName, (error, message) => {
+            try{
+                if(!error){
+                    // Message received and deleted
+                    setStatus(this, statusEnum.received);
+                    let msg = {
+                        deviceId: message.customProperties['iothub-connection-device-id'],
+                        topic: message.brokerProperties['To'],
+                        payload: JSON.parse( message.body )
+                    };
+                    if( this.timer ) this.send(msg);
+                } else {
+                    setStatus(this, statusEnum.error);
+                }
+            }
+            catch( e ){
+                this.log(e);
+                setStatus(this, statusEnum.error);
+            }
+        });
+    }
+
+    function AzureServiceBusQueueReceiverNode(config){
+        // Store node for further use
+        var node = this;
+        this.interval = parseInt(config.interval);
+        if( !Number.isFinite( this.interval ) ) this.interval = 3000;
+        this.queueName = config.queuename.trim();
+
+        // Create the Node-RED node
+        RED.nodes.createNode(this, config);
+
+        setStatus(node, statusEnum.disconnected);
+
+        this.serviceBusService = azure.createServiceBusService(node.credentials.connectionString);
+
+        readServiceBusQueue.bind(this);
+        this.timer = setInterval( readServiceBusQueue.bind(this), this.interval);
+
+        node.on('close', function() {
+            if( this.timer ) clearInterval( this.timer );
+            this.timer = null;
         });
     }
 
@@ -335,6 +383,12 @@ module.exports = function (RED) {
     });
 
     RED.nodes.registerType("azureiothubreceiver", AzureIoTHubReceiverNode, {
+        credentials: {
+            connectionString: { type: "text" }
+        }
+    });
+
+    RED.nodes.registerType("azureservicebusqueuereceiver", AzureServiceBusQueueReceiverNode, {
         credentials: {
             connectionString: { type: "text" }
         }
